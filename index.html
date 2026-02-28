@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Personal Expenses (Sync)</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    body { margin: 0; background:#f6f7fb; color:#111; }
+    header { padding: 16px; background:#fff; position: sticky; top: 0; border-bottom: 1px solid #e7e7ee; }
+    h1 { margin: 0; font-size: 18px; }
+    main { padding: 16px; max-width: 980px; margin: 0 auto; }
+    .grid { display: grid; gap: 12px; }
+    @media (min-width: 900px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
+    .card { background:#fff; border:1px solid #e7e7ee; border-radius: 12px; padding: 12px; }
+    label { font-size: 12px; color:#444; display:block; margin-bottom: 6px; }
+    input, select, textarea, button {
+      width: 100%; padding: 10px; border-radius: 10px; border:1px solid #d8d8e3; font-size: 14px; box-sizing: border-box; background:#fff;
+    }
+    textarea { resize: vertical; min-height: 70px; }
+    button { cursor: pointer; border: 0; background:#111; color:#fff; font-weight: 600; }
+    button.secondary { background:#eef0f6; color:#111; border:1px solid #d8d8e3; }
+    .row { display:flex; gap:8px; }
+    .row > * { flex:1; }
+    .muted { color:#666; font-size: 12px; }
+    .kpi { font-size: 22px; font-weight: 800; }
+    table { width:100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+    th { color:#444; font-weight: 600; }
+    .right { text-align:right; }
+    .pill { display:inline-block; padding:4px 8px; border-radius: 999px; font-size: 12px; background:#eef0f6; }
+    .danger { background:#ffe7ea; color:#b00020; }
+    .ok { background:#e9fff0; color:#0b6b2b; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Personal Expenses</h1>
+  <div class="muted" id="monthLabel"></div>
+  <div class="muted" id="syncStatus"></div>
+</header>
+
+<main class="grid" style="gap:16px;">
+  <section class="grid grid-2">
+    <div class="card">
+      <div class="muted">Total bulan ini</div>
+      <div class="kpi" id="totalThisMonth">RM 0.00</div>
+      <div class="muted" id="countThisMonth">0 transaksi</div>
+    </div>
+
+    <div class="card">
+      <div class="muted">Sync</div>
+      <div class="row" style="margin-top:10px;">
+        <button class="secondary" id="btnRefresh">Refresh</button>
+        <button class="secondary" id="btnExport">Export CSV</button>
+      </div>
+      <div class="muted" style="margin-top:10px;">
+        Data disimpan dalam Google Sheet (sync antara iPhone & laptop).
+      </div>
+    </div>
+  </section>
+
+  <section class="grid grid-2">
+    <div class="card">
+      <h3 style="margin:0 0 10px 0;">Tambah Perbelanjaan</h3>
+      <form id="expenseForm" class="grid" style="gap:10px;">
+        <div class="row">
+          <div>
+            <label>Tarikh</label>
+            <input type="date" id="date" required />
+          </div>
+          <div>
+            <label>Amaun (RM)</label>
+            <input type="number" id="amount" min="0" step="0.01" required />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Kategori (Fixed)</label>
+            <select id="category" required></select>
+          </div>
+          <div>
+            <label>Payment Mode</label>
+            <select id="mode" required>
+              <option>Cash</option>
+              <option>QR Pay</option>
+              <option>Credit Card Maybank</option>
+              <option>Credit Card RHB</option>
+              <option>Credit Card BSN</option>
+              <option>SPayLater</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label>Nota (optional)</label>
+          <textarea id="notes" placeholder="Contoh: makan tengahari, parking, dll"></textarea>
+        </div>
+
+        <button type="submit">Simpan (Sync)</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 10px 0;">Ringkasan Payment Mode (Bulan Ini)</h3>
+      <div id="modeSummary"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3 style="margin:0 0 10px 0;">Budget Kategori (Bulan Ini)</h3>
+    <div class="muted" style="margin-bottom:8px;">Budget diambil dari tab <b>Budgets</b> dalam Google Sheet.</div>
+    <div id="categorySummary"></div>
+  </section>
+
+  <section class="card">
+    <h3 style="margin:0 0 10px 0;">Transaksi (Bulan Ini)</h3>
+    <div class="muted" style="margin-bottom:8px;">Klik “Padam” untuk buang rekod (terus delete dari Google Sheet).</div>
+    <div style="overflow:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Tarikh</th>
+            <th>Kategori</th>
+            <th>Mode</th>
+            <th class="right">Amaun</th>
+            <th>Nota</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="txTable"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+  // === EDIT 2 VALUE INI ===
+  const GAS_URL = "https://script.google.com/macros/s/AKfycby0Y_9LgGZOLciEV9s_7F27JyUA75RFEFsG899sgrH050H3EbldlE1q8oopZz2hpNA/exec";
+  const TOKEN   = "IsymatPotpot2302";
+  // =========================
+
+  const fmtRM = (n) => "RM " + (Number(n||0)).toFixed(2);
+  const todayISO = () => new Date().toISOString().slice(0,10);
+
+  const getMonthKey = (d) => {
+    const dt = new Date(d + "T00:00:00");
+    return dt.getFullYear() + "-" + String(dt.getMonth()+1).padStart(2,"0");
+  };
+
+  const monthLabel = (monthKey) => {
+    const [y,m] = monthKey.split("-").map(Number);
+    const dt = new Date(y, m-1, 1);
+    return dt.toLocaleDateString("ms-MY", { month:"long", year:"numeric" });
+  };
+
+  const FIXED_CATEGORIES = [
+    "Nafkah","TNB","PAIP","Makan","Zakat","Petrol","Saving","Digi","Rumah","Taska",
+    "Medical card","Iphone","Prime","Maxis","Hibah","Sofa","Others"
+  ];
+
+  const MODES = [
+    "Cash","QR Pay","Credit Card Maybank","Credit Card RHB","Credit Card BSN","SPayLater"
+  ];
+
+  const elMonthLabel = document.getElementById("monthLabel");
+  const elSync = document.getElementById("syncStatus");
+  const elTotal = document.getElementById("totalThisMonth");
+  const elCount = document.getElementById("countThisMonth");
+  const elCat = document.getElementById("category");
+  const elMode = document.getElementById("mode");
+  const elNotes = document.getElementById("notes");
+  const elDate = document.getElementById("date");
+  const elAmount = document.getElementById("amount");
+  const elTx = document.getElementById("txTable");
+  const elCategorySummary = document.getElementById("categorySummary");
+  const elModeSummary = document.getElementById("modeSummary");
+
+  const currentMonth = getMonthKey(todayISO());
+  elMonthLabel.textContent = "Bulan semasa: " + monthLabel(currentMonth);
+  elDate.value = todayISO();
+
+  // dropdown kategori fixed
+  elCat.innerHTML = FIXED_CATEGORIES.map(c=>`<option>${c}</option>`).join("");
+
+  async function apiGet(action) {
+    const url = `${GAS_URL}?action=${encodeURIComponent(action)}&token=${encodeURIComponent(TOKEN)}`;
+    const res = await fetch(url);
+    return await res.json();
+  }
+
+  async function apiPost(action, data) {
+    const body = new URLSearchParams({ action, token: TOKEN, ...data });
+    const res = await fetch(GAS_URL, { method: "POST", body });
+    return await res.json();
+  }
+
+  let expenses = [];
+  let budgets = {}; // {category: monthly_budget}
+
+  function setSync(ok, msg){
+    const pill = ok ? "pill ok" : "pill danger";
+    elSync.innerHTML = `<span class="${pill}">${msg}</span>`;
+  }
+
+  function expensesThisMonth(){
+    return expenses
+      .filter(x => getMonthKey(String(x.date||"")) === currentMonth)
+      .sort((a,b)=> (String(a.date) < String(b.date) ? 1 : -1));
+  }
+
+  function summarize(){
+    const tx = expensesThisMonth();
+    const total = tx.reduce((s,x)=> s + Number(x.amount||0), 0);
+    elTotal.textContent = fmtRM(total);
+    elCount.textContent = `${tx.length} transaksi`;
+
+    // Table
+    elTx.innerHTML = tx.map(x => `
+      <tr>
+        <td>${x.date || ""}</td>
+        <td>${x.category || ""}</td>
+        <td>${x.mode || ""}</td>
+        <td class="right">${fmtRM(x.amount)}</td>
+        <td>${x.notes || ""}</td>
+        <td class="right"><button class="secondary" data-del="${x.id}">Padam</button></td>
+      </tr>
+    `).join("");
+
+    // Category summary with budget
+    const byCat = {};
+    tx.forEach(x => byCat[x.category] = (byCat[x.category]||0) + Number(x.amount||0));
+
+    elCategorySummary.innerHTML = `
+      <table>
+        <thead><tr><th>Kategori</th><th class="right">Spent</th><th class="right">Budget</th><th class="right">Baki</th></tr></thead>
+        <tbody>
+          ${FIXED_CATEGORIES.map(c=>{
+            const spent = byCat[c]||0;
+            const bud = Number(budgets[c]||0);
+            const rem = bud - spent;
+            const cls = (bud && rem < 0) ? "pill danger" : "pill";
+            return `
+              <tr>
+                <td>${c}</td>
+                <td class="right">${fmtRM(spent)}</td>
+                <td class="right">${bud ? fmtRM(bud) : '<span class="muted">—</span>'}</td>
+                <td class="right">${bud ? `<span class="${cls}">${fmtRM(rem)}</span>` : '<span class="muted">—</span>'}</td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    `;
+
+    // Mode summary
+    const byMode = {};
+    tx.forEach(x => byMode[x.mode] = (byMode[x.mode]||0) + Number(x.amount||0));
+
+    elModeSummary.innerHTML = `
+      <table>
+        <thead><tr><th>Mode</th><th class="right">Spent</th></tr></thead>
+        <tbody>
+          ${MODES.map(m=>`
+            <tr><td>${m}</td><td class="right">${fmtRM(byMode[m]||0)}</td></tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  async function refreshAll(){
+    try{
+      setSync(true, "Syncing...");
+      const [ex, bd] = await Promise.all([apiGet("listExpenses"), apiGet("listBudgets")]);
+
+      if (!ex.ok) throw new Error(ex.error || "listExpenses failed");
+      if (!bd.ok) throw new Error(bd.error || "listBudgets failed");
+
+      expenses = (ex.items || []).map(x => ({
+        id: x.id,
+        date: String(x.date || ""),
+        category: String(x.category || ""),
+        amount: Number(x.amount || 0),
+        mode: String(x.mode || ""),
+        notes: String(x.notes || "")
+      }));
+
+      budgets = {};
+      (bd.items || []).forEach(x => {
+        const cat = String(x.category || "").trim();
+        if (cat) budgets[cat] = Number(x.monthly_budget || 0);
+      });
+
+      setSync(true, "Synced ✓");
+      summarize();
+    }catch(err){
+      setSync(false, "Sync error: " + String(err.message || err));
+    }
+  }
+
+  // Add expense (sync)
+  document.getElementById("expenseForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const payload = {
+      date: elDate.value,
+      category: elCat.value,
+      amount: String(Number(elAmount.value||0)),
+      mode: elMode.value,
+      notes: elNotes.value.trim()
+    };
+    try{
+      setSync(true, "Saving...");
+      const res = await apiPost("addExpense", payload);
+      if (!res.ok) throw new Error(res.error || "addExpense failed");
+      elAmount.value = "";
+      elNotes.value = "";
+      await refreshAll();
+    }catch(err){
+      setSync(false, "Save error: " + String(err.message || err));
+    }
+  });
+
+  // Delete expense (sync)
+  document.addEventListener("click", async (e)=>{
+    const btn = e.target.closest("button[data-del]");
+    if (!btn) return;
+    const id = btn.getAttribute("data-del");
+    if (!confirm("Padam rekod ini?")) return;
+
+    try{
+      setSync(true, "Deleting...");
+      const res = await apiPost("deleteExpense", { id });
+      if (!res.ok) throw new Error(res.error || "deleteExpense failed");
+      await refreshAll();
+    }catch(err){
+      setSync(false, "Delete error: " + String(err.message || err));
+    }
+  });
+
+  // Export CSV
+  document.getElementById("btnExport").addEventListener("click", ()=>{
+    const tx = expensesThisMonth();
+    const rows = [["Date","Category","Amount","Payment Mode","Notes"]]
+      .concat(tx.map(x=>[x.date,x.category,x.amount,x.mode,x.notes||""]));
+    const csv = rows.map(r => r.map(v => `"${String(v).replaceAll('"','""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "expenses-this-month.csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  document.getElementById("btnRefresh").addEventListener("click", refreshAll);
+
+  // start
+  refreshAll();
+</script>
+</body>
+</html>
