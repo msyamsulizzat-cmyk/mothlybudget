@@ -28,7 +28,7 @@
 
       --radius: 18px;
       --pad: 16px;
-      --tap: 46px; /* min tap target */
+      --tap: 46px;
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, Segoe UI, Roboto, Arial;
       font-size: 16px;
     }
@@ -59,7 +59,6 @@
         env(safe-area-inset-left);
     }
 
-    /* Top sticky app bar */
     header{
       position: sticky;
       top: 0;
@@ -96,7 +95,7 @@
     main{
       max-width: 720px;
       margin: 0 auto;
-      padding: 14px 16px 96px; /* bottom space for nav */
+      padding: 14px 16px 96px;
     }
 
     .card{
@@ -116,7 +115,6 @@
       margin-top: 4px;
     }
 
-    /* Inputs */
     label{ display:block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
     input, select, textarea, button{
       width:100%;
@@ -154,7 +152,6 @@
     .row{ display:flex; gap: 10px; }
     .row > *{ flex:1; }
 
-    /* Segmented header (summary) */
     .summary{
       display:flex;
       align-items:flex-end;
@@ -162,7 +159,6 @@
       gap: 12px;
     }
 
-    /* Bottom nav */
     .bottom-nav{
       position: fixed;
       left: 0; right: 0; bottom: 0;
@@ -200,7 +196,6 @@
       border-color: color-mix(in srgb, var(--text) 35%, transparent);
     }
 
-    /* Floating Add button */
     .fab{
       position: absolute;
       left: 50%;
@@ -221,13 +216,11 @@
       cursor: pointer;
     }
 
-    /* Table (for budgets) */
     table{ width:100%; border-collapse: collapse; font-size: 14px; }
     th, td{ padding: 12px 8px; border-bottom: 1px solid var(--line); text-align:left; vertical-align: top; }
     th{ color: var(--muted); font-weight: 800; }
     .right{ text-align:right; }
 
-    /* Transaction list with delete reveal (simple) */
     .tx-list{ display:grid; gap: 10px; }
     .tx-item{
       position: relative;
@@ -263,7 +256,6 @@
     .tx-amt{ font-weight: 900; white-space: nowrap; text-align:right; }
     .tx-note{ color: var(--muted); font-size: 12px; margin-top: 6px; word-break: break-word; }
 
-    /* Sections */
     .section{ display:none; }
     .section.active{ display:block; }
   </style>
@@ -284,7 +276,6 @@
 </header>
 
 <main>
-  <!-- DASHBOARD -->
   <section id="screenDashboard" class="section active">
     <div class="grid">
       <div class="card">
@@ -327,7 +318,6 @@
     </div>
   </section>
 
-  <!-- ADD -->
   <section id="screenAdd" class="section">
     <div class="card">
       <h3 style="margin:0 0 10px 0;">Key In Perbelanjaan</h3>
@@ -371,19 +361,15 @@
     </div>
   </section>
 
-  <!-- TRANSACTIONS -->
   <section id="screenTx" class="section">
     <div class="card">
       <h3 style="margin:0 0 10px 0;">Transaksi (Cycle Dipilih)</h3>
-      <div class="muted" style="margin-bottom:10px;">
-        Swipe kiri (atau tap) untuk “Delete”.
-      </div>
+      <div class="muted" style="margin-bottom:10px;">Swipe kiri (atau tap) untuk “Delete”.</div>
       <div id="txList" class="tx-list"></div>
     </div>
   </section>
 </main>
 
-<!-- Bottom navigation -->
 <div class="bottom-nav">
   <div class="nav-inner">
     <button class="nav-btn active" id="navDashboard">Dashboard</button>
@@ -401,6 +387,44 @@
   const fmtRM = (n) => "RM " + (Number(n||0)).toFixed(2);
   const todayISO = () => new Date().toISOString().slice(0,10);
 
+  // --- DATE NORMALIZER (fix "Invalid time value") ---
+  function normalizeDateISO(v){
+    if (v == null) return null;
+    let s = String(v).trim();
+    if (!s) return null;
+
+    // ISO datetime -> YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0,10);
+
+    // already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+    // dd/mm/yyyy (Malaysia) -> YYYY-MM-DD
+    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m){
+      const dd = Number(m[1]);
+      const mm = Number(m[2]);
+      const yy = Number(m[3]);
+      if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12){
+        return `${yy}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
+      }
+    }
+
+    // last resort parse
+    const dt = new Date(s);
+    if (isNaN(dt.getTime())) return null;
+    return dt.toISOString().slice(0,10);
+  }
+
+  function safeDate(dateISO){
+    const iso = normalizeDateISO(dateISO);
+    if (!iso) return null;
+    const dt = new Date(iso + "T00:00:00");
+    if (isNaN(dt.getTime())) return null;
+    return { iso, dt };
+  }
+  // --------------------------------------------------
+
   const FIXED_CATEGORIES = [
     "Nafkah","TNB","PAIP","Makan","Zakat","Petrol","Saving","Digi","Rumah","Taska",
     "Medical card","Iphone","Prime","Maxis","Hibah","Sofa","Others"
@@ -412,9 +436,12 @@
 
   // ====== PERIOD (25 → 24) + max 12 cycles ======
   function getPeriodForDate(dateISO) {
-    const dt = new Date(dateISO + "T00:00:00");
+    const parsed = safeDate(dateISO);
+    if (!parsed) return null;
+
+    const dt = parsed.dt;
     const y = dt.getFullYear();
-    const m = dt.getMonth(); // 0-11
+    const m = dt.getMonth();
     const d = dt.getDate();
 
     let startY = y, startM = m;
@@ -432,7 +459,7 @@
   }
 
   function inPeriod(dateISO, period) {
-    if (!dateISO) return false;
+    if (!dateISO || !period) return false;
     const d = new Date(dateISO + "T00:00:00").getTime();
     const s = new Date(period.startISO + "T00:00:00").getTime();
     const e = new Date(period.endISO + "T23:59:59").getTime();
@@ -510,7 +537,7 @@
     summarize();
   });
 
-  // API (avoid CORS preflight with URLSearchParams)
+  // API
   async function apiGet(action) {
     const url = `${GAS_URL}?action=${encodeURIComponent(action)}&token=${encodeURIComponent(TOKEN)}`;
     const res = await fetch(url);
@@ -524,7 +551,7 @@
   }
 
   let expenses = [];
-  let budgets = {}; // {category: monthly_budget}
+  let budgets = {};
   let currentPeriod = getPeriodForDate(todayISO());
 
   function setSyncState(kind, msg){
@@ -534,7 +561,10 @@
 
   function expensesThisPeriod(){
     return expenses
-      .filter(x => inPeriod(String(x.date||""), currentPeriod))
+      .filter(x => {
+        const iso = normalizeDateISO(x.date);
+        return iso ? inPeriod(iso, currentPeriod) : false;
+      })
       .filter(x => !excludeSaving || String(x.category||"").trim().toLowerCase() !== "saving")
       .sort((a,b)=> (String(a.date) < String(b.date) ? 1 : -1));
   }
@@ -542,12 +572,14 @@
   function buildPeriodsFromExpensesMax12() {
     const map = new Map();
     for (const x of expenses) {
-      const dateISO = String(x.date||"").trim();
+      const dateISO = normalizeDateISO(x.date);
       if (!dateISO) continue;
       const p = getPeriodForDate(dateISO);
+      if (!p) continue;
       map.set(periodKey(p), p);
     }
-    map.set(periodKey(getPeriodForDate(todayISO())), getPeriodForDate(todayISO()));
+    const nowP = getPeriodForDate(todayISO());
+    if (nowP) map.set(periodKey(nowP), nowP);
 
     return Array.from(map.values())
       .sort((a,b)=> b.start - a.start)
@@ -556,7 +588,10 @@
 
   function renderPeriodPicker() {
     const periods = buildPeriodsFromExpensesMax12();
-    if (!periods.length) periods.push(getPeriodForDate(todayISO()));
+    if (!periods.length) {
+      const p = getPeriodForDate(todayISO());
+      if (p) periods.push(p);
+    }
 
     if (!periods.find(p => periodKey(p) === periodKey(currentPeriod))) currentPeriod = periods[0];
 
@@ -567,7 +602,7 @@
       return `<option value="${key}" ${selected}>${label}</option>`;
     }).join("");
 
-    elPeriodLabel.textContent = "Cycle: " + formatPeriodLabel(currentPeriod);
+    elPeriodLabel.textContent = currentPeriod ? ("Cycle: " + formatPeriodLabel(currentPeriod)) : "Cycle: —";
 
     elPicker.onchange = () => {
       const [s,e] = elPicker.value.split("_");
@@ -584,7 +619,6 @@
     elTotal.textContent = fmtRM(total);
     elCount.textContent = `${tx.length} transaksi`;
 
-    // Payment mode summary
     const byMode = {};
     tx.forEach(x => byMode[x.mode] = (byMode[x.mode]||0) + Number(x.amount||0));
     elModeSummary.innerHTML = `
@@ -598,7 +632,6 @@
       </table>
     `;
 
-    // Category summary with budget
     const byCat = {};
     tx.forEach(x => byCat[x.category] = (byCat[x.category]||0) + Number(x.amount||0));
     elCategorySummary.innerHTML = `
@@ -623,7 +656,6 @@
       </table>
     `;
 
-    // Transactions list with reveal delete
     elTxList.innerHTML = tx.map(x => `
       <div class="tx-item" data-id="${x.id}">
         <div class="tx-actions">
@@ -632,7 +664,7 @@
         <div class="tx-content">
           <div class="tx-left">
             <div class="tx-title">${x.category || ""}</div>
-            <div class="tx-sub">${x.date || ""} • ${x.mode || ""}</div>
+            <div class="tx-sub">${normalizeDateISO(x.date) || ""} • ${x.mode || ""}</div>
             ${x.notes ? `<div class="tx-note">${x.notes}</div>` : ""}
           </div>
           <div class="tx-amt">${fmtRM(x.amount)}</div>
@@ -683,7 +715,7 @@
 
       expenses = (ex.items || []).map(x => ({
         id: x.id,
-        date: String(x.date || ""),
+        date: normalizeDateISO(x.date || ""),
         category: String(x.category || ""),
         amount: Number(x.amount || 0),
         mode: String(x.mode || ""),
@@ -701,14 +733,13 @@
       summarize();
 
       setSyncState("ok", "Synced ✓");
-   }catch(err){
-  const msg = String(err && (err.message || err) || "Unknown error");
-  setSyncState("danger", "Sync error: " + msg);
-  console.error(err);
-}
+    }catch(err){
+      const msg = String(err && (err.message || err) || "Unknown error");
+      setSyncState("danger", "Sync error: " + msg);
+      console.error(err);
+    }
   }
 
-  // Add expense (sync)
   document.getElementById("expenseForm").addEventListener("submit", async (e)=>{
     e.preventDefault();
     const payload = {
@@ -727,12 +758,12 @@
       await refreshAll();
       showScreen("dashboard");
     }catch(err){
-      setSyncState("danger", "Save error");
+      const msg = String(err && (err.message || err) || "Unknown error");
+      setSyncState("danger", "Save error: " + msg);
       console.error(err);
     }
   });
 
-  // Delete expense (sync)
   document.addEventListener("click", async (e)=>{
     const btn = e.target.closest("button[data-del]");
     if (!btn) return;
@@ -745,26 +776,25 @@
       if (!res.ok) throw new Error(res.error || "deleteExpense failed");
       await refreshAll();
     }catch(err){
-      setSyncState("danger", "Delete error");
+      const msg = String(err && (err.message || err) || "Unknown error");
+      setSyncState("danger", "Delete error: " + msg);
       console.error(err);
     }
   });
 
-  // Export CSV for selected cycle
   document.getElementById("btnExport").addEventListener("click", ()=>{
     const tx = expensesThisPeriod();
     const rows = [["Date","Category","Amount","Payment Mode","Notes"]]
-      .concat(tx.map(x=>[x.date,x.category,x.amount,x.mode,x.notes||""]));
+      .concat(tx.map(x=>[normalizeDateISO(x.date)||"",x.category,x.amount,x.mode,x.notes||""]));
     const csv = rows.map(r => r.map(v => `"${String(v).replaceAll('"','""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `expenses_${currentPeriod.startISO}_to_${currentPeriod.endISO}.csv`;
+    a.download = currentPeriod ? `expenses_${currentPeriod.startISO}_to_${currentPeriod.endISO}.csv` : `expenses.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   });
 
-  // Refresh button
   document.getElementById("btnRefresh").addEventListener("click", refreshAll);
 
   // Start
