@@ -2,80 +2,331 @@
 <html lang="ms">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Personal Expenses (25→24, Sync)</title>
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#ffffff">
+
+  <title>Personal Expenses</title>
+
   <style>
-    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-    body { margin: 0; background:#f6f7fb; color:#111; }
-    header { padding: 16px; background:#fff; position: sticky; top: 0; border-bottom: 1px solid #e7e7ee; z-index: 10; }
-    h1 { margin: 0; font-size: 18px; }
-    main { padding: 16px; max-width: 980px; margin: 0 auto; }
-    .grid { display: grid; gap: 12px; }
-    @media (min-width: 900px){ .grid-2 { grid-template-columns: 1fr 1fr; } }
-    .card { background:#fff; border:1px solid #e7e7ee; border-radius: 12px; padding: 12px; }
-    label { font-size: 12px; color:#444; display:block; margin-bottom: 6px; }
-    input, select, textarea, button {
-      width: 100%; padding: 10px; border-radius: 10px; border:1px solid #d8d8e3; font-size: 14px; box-sizing: border-box; background:#fff;
+    :root{
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #111111;
+      --muted:#666666;
+      --line:#e7e7ee;
+      --chip:#eef0f6;
+      --danger-bg:#ffe7ea;
+      --danger:#b00020;
+      --ok-bg:#e9fff0;
+      --ok:#0b6b2b;
+
+      --radius: 18px;
+      --pad: 16px;
+      --tap: 46px; /* min tap target */
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, Segoe UI, Roboto, Arial;
+      font-size: 16px;
     }
-    textarea { resize: vertical; min-height: 70px; }
-    button { cursor: pointer; border: 0; background:#111; color:#fff; font-weight: 600; }
-    button.secondary { background:#eef0f6; color:#111; border:1px solid #d8d8e3; }
-    .row { display:flex; gap:8px; align-items: stretch; }
-    .row > * { flex:1; }
-    .muted { color:#666; font-size: 12px; }
-    .kpi { font-size: 22px; font-weight: 800; }
-    table { width:100%; border-collapse: collapse; font-size: 13px; }
-    th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
-    th { color:#444; font-weight: 600; }
-    .right { text-align:right; }
-    .pill { display:inline-block; padding:4px 8px; border-radius: 999px; font-size: 12px; background:#eef0f6; }
-    .danger { background:#ffe7ea; color:#b00020; }
-    .ok { background:#e9fff0; color:#0b6b2b; }
-    .small { font-size: 12px; }
+
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg:#0b0c10;
+        --card:#14151b;
+        --text:#f1f1f4;
+        --muted:#a6a6b2;
+        --line:#2a2c35;
+        --chip:#222431;
+        --danger-bg:#3b0b12;
+        --danger:#ff6b7a;
+        --ok-bg:#072615;
+        --ok:#46e08f;
+      }
+      meta[name="theme-color"]{ content: #0b0c10; }
+    }
+
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      padding:
+        env(safe-area-inset-top)
+        env(safe-area-inset-right)
+        env(safe-area-inset-bottom)
+        env(safe-area-inset-left);
+    }
+
+    /* Top sticky app bar */
+    header{
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: color-mix(in srgb, var(--card) 92%, transparent);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--line);
+      padding: 14px 16px;
+    }
+
+    .app-title{
+      display:flex;
+      align-items:flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h1{ margin:0; font-size: 18px; font-weight: 800; letter-spacing: .2px; }
+    .muted{ color:var(--muted); font-size: 12px; }
+
+    .pill{
+      display:inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: var(--chip);
+      color: var(--text);
+      border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+      white-space: nowrap;
+    }
+    .pill.ok{ background: var(--ok-bg); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+    .pill.danger{ background: var(--danger-bg); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+
+    main{
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 14px 16px 96px; /* bottom space for nav */
+    }
+
+    .card{
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: var(--pad);
+      box-shadow: 0 6px 22px rgba(0,0,0,0.06);
+    }
+
+    .grid{ display:grid; gap: 14px; }
+
+    .kpi{
+      font-size: 30px;
+      font-weight: 900;
+      letter-spacing: -0.4px;
+      margin-top: 4px;
+    }
+
+    /* Inputs */
+    label{ display:block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    input, select, textarea, button{
+      width:100%;
+      box-sizing: border-box;
+      font-size: 16px;
+      border-radius: 14px;
+      border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+      background: color-mix(in srgb, var(--card) 92%, transparent);
+      color: var(--text);
+      padding: 12px 14px;
+      min-height: var(--tap);
+      outline: none;
+    }
+    textarea{ min-height: 84px; resize: vertical; }
+
+    button{
+      border: 0;
+      background: var(--text);
+      color: color-mix(in srgb, var(--bg) 98%, transparent);
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button.secondary{
+      background: var(--chip);
+      color: var(--text);
+      border: 1px solid var(--line);
+      font-weight: 700;
+    }
+    button.danger{
+      background: var(--danger-bg);
+      color: var(--danger);
+      border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+    }
+
+    .row{ display:flex; gap: 10px; }
+    .row > *{ flex:1; }
+
+    /* Segmented header (summary) */
+    .summary{
+      display:flex;
+      align-items:flex-end;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    /* Bottom nav */
+    .bottom-nav{
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+      background: color-mix(in srgb, var(--card) 92%, transparent);
+      backdrop-filter: blur(14px);
+      border-top: 1px solid var(--line);
+      z-index: 60;
+    }
+    .nav-inner{
+      max-width: 720px;
+      margin: 0 auto;
+      display:flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+    }
+    .nav-btn{
+      flex:1;
+      min-height: 46px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: var(--chip);
+      color: var(--text);
+      font-weight: 800;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap: 8px;
+    }
+    .nav-btn.active{
+      background: color-mix(in srgb, var(--text) 92%, transparent);
+      color: color-mix(in srgb, var(--bg) 98%, transparent);
+      border-color: color-mix(in srgb, var(--text) 35%, transparent);
+    }
+
+    /* Floating Add button */
+    .fab{
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      top: -18px;
+      width: 56px;
+      height: 56px;
+      border-radius: 18px;
+      border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+      background: var(--text);
+      color: color-mix(in srgb, var(--bg) 98%, transparent);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size: 28px;
+      font-weight: 900;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.24);
+      cursor: pointer;
+    }
+
+    /* Table (for budgets) */
+    table{ width:100%; border-collapse: collapse; font-size: 14px; }
+    th, td{ padding: 12px 8px; border-bottom: 1px solid var(--line); text-align:left; vertical-align: top; }
+    th{ color: var(--muted); font-weight: 800; }
+    .right{ text-align:right; }
+
+    /* Transaction list with delete reveal (simple) */
+    .tx-list{ display:grid; gap: 10px; }
+    .tx-item{
+      position: relative;
+      overflow: hidden;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: var(--card);
+    }
+    .tx-actions{
+      position:absolute;
+      right:0; top:0; bottom:0;
+      display:flex;
+      align-items:center;
+      padding: 0 10px;
+      gap: 8px;
+      background: color-mix(in srgb, var(--danger-bg) 90%, transparent);
+    }
+    .tx-actions button{ min-height: 40px; padding: 0 12px; border-radius: 12px; }
+    .tx-content{
+      display:flex;
+      gap: 12px;
+      padding: 12px 12px;
+      align-items:flex-start;
+      justify-content: space-between;
+      transform: translateX(0);
+      transition: transform .15s ease;
+      user-select: none;
+    }
+    .tx-item.reveal .tx-content{ transform: translateX(-92px); }
+    .tx-left{ min-width: 0; }
+    .tx-title{ font-weight: 900; }
+    .tx-sub{ color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .tx-amt{ font-weight: 900; white-space: nowrap; text-align:right; }
+    .tx-note{ color: var(--muted); font-size: 12px; margin-top: 6px; word-break: break-word; }
+
+    /* Sections */
+    .section{ display:none; }
+    .section.active{ display:block; }
   </style>
 </head>
+
 <body>
 <header>
-  <h1>Personal Expenses</h1>
-  <div class="muted" id="periodLabel"></div>
-  <div class="muted" id="syncStatus"></div>
+  <div class="app-title">
+    <div>
+      <h1>Personal Expenses</h1>
+      <div class="muted" id="periodLabel"></div>
+    </div>
+    <div style="text-align:right;">
+      <div class="muted">Sync</div>
+      <div id="syncStatus" class="pill">—</div>
+    </div>
+  </div>
 </header>
 
-<main class="grid" style="gap:16px;">
-  <section class="grid grid-2">
-    <div class="card">
-      <div class="muted">Total untuk cycle dipilih (25hb → 24hb)</div>
-      <div class="kpi" id="totalThisPeriod">RM 0.00</div>
-      <div class="muted" id="countThisPeriod">0 transaksi</div>
-      <div class="muted small" style="margin-top:6px;">
-        Dashboard ikut billing cycle: 25hb bulan ini hingga 24hb bulan hadapan.
+<main>
+  <!-- DASHBOARD -->
+  <section id="screenDashboard" class="section active">
+    <div class="grid">
+      <div class="card">
+        <div class="summary">
+          <div>
+            <div class="muted">Total cycle dipilih (25→24)</div>
+            <div class="kpi" id="totalThisPeriod">RM 0.00</div>
+            <div class="muted" id="countThisPeriod">0 transaksi</div>
+          </div>
+          <div style="min-width: 180px;">
+            <label>Cycle (max 12)</label>
+            <select id="periodPicker"></select>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <label style="display:flex; gap:10px; align-items:center; font-size:13px; color:var(--text); margin:0;">
+            <input type="checkbox" id="toggleExcludeSaving" style="width:auto; transform: scale(1.2);" />
+            Exclude “Saving” dari kiraan
+          </label>
+          <div class="muted">ON = Saving tak dikira sebagai belanja (dashboard & export).</div>
+        </div>
+
+        <div class="row" style="margin-top:12px;">
+          <button class="secondary" id="btnRefresh">Refresh</button>
+          <button class="secondary" id="btnExport">Export CSV</button>
+        </div>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="muted">Pilih cycle (max 12)</div>
-      <select id="periodPicker"></select>
-
-      <div style="margin-top:10px;">
-        <label style="display:flex; gap:10px; align-items:center; font-size:13px; color:#111; margin:0;">
-          <input type="checkbox" id="toggleExcludeSaving" style="width:auto; transform: scale(1.2);" />
-          Exclude “Saving” dari kiraan (total & summary)
-        </label>
-        <div class="muted">Jika ON: kategori Saving tidak dikira sebagai belanja.</div>
+      <div class="card">
+        <h3 style="margin:0 0 10px 0;">Ringkasan Payment Mode (Cycle Dipilih)</h3>
+        <div id="modeSummary"></div>
       </div>
 
-      <div class="row" style="margin-top:10px;">
-        <button class="secondary" id="btnRefresh">Refresh</button>
-        <button class="secondary" id="btnExport">Export CSV</button>
-      </div>
-
-      <div class="muted" style="margin-top:10px;">
-        Data sync ke Google Sheet (boleh guna iPhone + laptop).
+      <div class="card">
+        <h3 style="margin:0 0 10px 0;">Budget Kategori (Cycle Dipilih)</h3>
+        <div class="muted" style="margin-bottom:8px;">Budget diambil dari tab <b>Budgets</b> dalam Google Sheet.</div>
+        <div id="categorySummary"></div>
       </div>
     </div>
   </section>
 
-  <section class="grid grid-2">
+  <!-- ADD -->
+  <section id="screenAdd" class="section">
     <div class="card">
       <h3 style="margin:0 0 10px 0;">Key In Perbelanjaan</h3>
       <form id="expenseForm" class="grid" style="gap:10px;">
@@ -116,39 +367,28 @@
         <button type="submit">Simpan (Sync)</button>
       </form>
     </div>
+  </section>
 
+  <!-- TRANSACTIONS -->
+  <section id="screenTx" class="section">
     <div class="card">
-      <h3 style="margin:0 0 10px 0;">Ringkasan Payment Mode (Cycle Dipilih)</h3>
-      <div id="modeSummary"></div>
-    </div>
-  </section>
-
-  <section class="card">
-    <h3 style="margin:0 0 10px 0;">Budget Kategori (Cycle Dipilih)</h3>
-    <div class="muted" style="margin-bottom:8px;">Budget diambil dari tab <b>Budgets</b> dalam Google Sheet.</div>
-    <div id="categorySummary"></div>
-  </section>
-
-  <section class="card">
-    <h3 style="margin:0 0 10px 0;">Transaksi (Cycle Dipilih)</h3>
-    <div class="muted" style="margin-bottom:8px;">Klik “Padam” untuk delete rekod dari Google Sheet.</div>
-    <div style="overflow:auto;">
-      <table>
-        <thead>
-          <tr>
-            <th>Tarikh</th>
-            <th>Kategori</th>
-            <th>Mode</th>
-            <th class="right">Amaun</th>
-            <th>Notes</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="txTable"></tbody>
-      </table>
+      <h3 style="margin:0 0 10px 0;">Transaksi (Cycle Dipilih)</h3>
+      <div class="muted" style="margin-bottom:10px;">
+        Swipe kiri (atau tap) untuk “Delete”.
+      </div>
+      <div id="txList" class="tx-list"></div>
     </div>
   </section>
 </main>
+
+<!-- Bottom navigation -->
+<div class="bottom-nav">
+  <div class="nav-inner">
+    <button class="nav-btn active" id="navDashboard">Dashboard</button>
+    <button class="fab" id="fabAdd" aria-label="Add">+</button>
+    <button class="nav-btn" id="navTx">Transactions</button>
+  </div>
+</div>
 
 <script>
   // === EDIT 2 VALUE INI SAHAJA ===
@@ -158,33 +398,6 @@
 
   const fmtRM = (n) => "RM " + (Number(n||0)).toFixed(2);
   const todayISO = () => new Date().toISOString().slice(0,10);
-
-  // Normalize any date coming from Google Sheet into YYYY-MM-DD
-  function normalizeDateISO(value) {
-    const s = String(value || "").trim();
-    if (!s) return "";
-
-    // Already YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-
-    // ISO datetime (YYYY-MM-DDTHH:mm:ss...)
-    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
-
-    // DD/MM/YYYY or D/M/YYYY
-    const dmY = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (dmY) {
-      const dd = dmY[1].padStart(2, "0");
-      const mm = dmY[2].padStart(2, "0");
-      const yy = dmY[3];
-      return `${yy}-${mm}-${dd}`;
-    }
-
-    // Let JS parse other formats
-    const dt = new Date(s);
-    if (!isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
-
-    return "";
-  }
 
   const FIXED_CATEGORIES = [
     "Nafkah","TNB","PAIP","Makan","Zakat","Petrol","Saving","Digi","Rumah","Taska",
@@ -198,8 +411,6 @@
   // ====== PERIOD (25 → 24) + max 12 cycles ======
   function getPeriodForDate(dateISO) {
     const dt = new Date(dateISO + "T00:00:00");
-    if (isNaN(dt.getTime())) throw new Error("Invalid Date: " + dateISO);
-
     const y = dt.getFullYear();
     const m = dt.getMonth(); // 0-11
     const d = dt.getDate();
@@ -221,8 +432,6 @@
   function inPeriod(dateISO, period) {
     if (!dateISO) return false;
     const d = new Date(dateISO + "T00:00:00").getTime();
-    if (isNaN(d)) return false;
-
     const s = new Date(period.startISO + "T00:00:00").getTime();
     const e = new Date(period.endISO + "T23:59:59").getTime();
     return d >= s && d <= e;
@@ -241,20 +450,49 @@
   // Elements
   const elPeriodLabel = document.getElementById("periodLabel");
   const elSync = document.getElementById("syncStatus");
+
   const elTotal = document.getElementById("totalThisPeriod");
   const elCount = document.getElementById("countThisPeriod");
   const elPicker = document.getElementById("periodPicker");
 
   const elToggleExcludeSaving = document.getElementById("toggleExcludeSaving");
 
+  const elDate = document.getElementById("date");
+  const elAmount = document.getElementById("amount");
   const elCat = document.getElementById("category");
   const elMode = document.getElementById("mode");
   const elNotes = document.getElementById("notes");
-  const elDate = document.getElementById("date");
-  const elAmount = document.getElementById("amount");
-  const elTx = document.getElementById("txTable");
-  const elCategorySummary = document.getElementById("categorySummary");
+
   const elModeSummary = document.getElementById("modeSummary");
+  const elCategorySummary = document.getElementById("categorySummary");
+  const elTxList = document.getElementById("txList");
+
+  // Screens
+  const screenDashboard = document.getElementById("screenDashboard");
+  const screenAdd = document.getElementById("screenAdd");
+  const screenTx = document.getElementById("screenTx");
+
+  // Nav
+  const navDashboard = document.getElementById("navDashboard");
+  const navTx = document.getElementById("navTx");
+  const fabAdd = document.getElementById("fabAdd");
+
+  function showScreen(which){
+    screenDashboard.classList.remove("active");
+    screenAdd.classList.remove("active");
+    screenTx.classList.remove("active");
+
+    navDashboard.classList.remove("active");
+    navTx.classList.remove("active");
+
+    if (which === "dashboard") { screenDashboard.classList.add("active"); navDashboard.classList.add("active"); }
+    if (which === "add") { screenAdd.classList.add("active"); }
+    if (which === "tx") { screenTx.classList.add("active"); navTx.classList.add("active"); }
+  }
+
+  navDashboard.addEventListener("click", ()=> showScreen("dashboard"));
+  navTx.addEventListener("click", ()=> showScreen("tx"));
+  fabAdd.addEventListener("click", ()=> showScreen("add"));
 
   // UI defaults
   elDate.value = todayISO();
@@ -287,9 +525,9 @@
   let budgets = {}; // {category: monthly_budget}
   let currentPeriod = getPeriodForDate(todayISO());
 
-  function setSync(ok, msg){
-    const pill = ok ? "pill ok" : "pill danger";
-    elSync.innerHTML = `<span class="${pill}">${msg}</span>`;
+  function setSyncState(kind, msg){
+    elSync.className = "pill " + (kind || "");
+    elSync.textContent = msg;
   }
 
   function expensesThisPeriod(){
@@ -307,8 +545,7 @@
       const p = getPeriodForDate(dateISO);
       map.set(periodKey(p), p);
     }
-    const pNow = getPeriodForDate(todayISO());
-    map.set(periodKey(pNow), pNow);
+    map.set(periodKey(getPeriodForDate(todayISO())), getPeriodForDate(todayISO()));
 
     return Array.from(map.values())
       .sort((a,b)=> b.start - a.start)
@@ -319,8 +556,7 @@
     const periods = buildPeriodsFromExpensesMax12();
     if (!periods.length) periods.push(getPeriodForDate(todayISO()));
 
-    const curKey = periodKey(currentPeriod);
-    if (!periods.find(p => periodKey(p) === curKey)) currentPeriod = periods[0];
+    if (!periods.find(p => periodKey(p) === periodKey(currentPeriod))) currentPeriod = periods[0];
 
     elPicker.innerHTML = periods.map(p=>{
       const key = periodKey(p);
@@ -333,9 +569,7 @@
 
     elPicker.onchange = () => {
       const [s,e] = elPicker.value.split("_");
-      const start = new Date(s + "T00:00:00");
-      const end = new Date(e + "T00:00:00");
-      currentPeriod = { startISO: s, endISO: e, start, end };
+      currentPeriod = { startISO: s, endISO: e, start: new Date(s + "T00:00:00"), end: new Date(e + "T00:00:00") };
       elPeriodLabel.textContent = "Cycle: " + formatPeriodLabel(currentPeriod);
       summarize();
     };
@@ -343,26 +577,28 @@
 
   function summarize(){
     const tx = expensesThisPeriod();
+
     const total = tx.reduce((s,x)=> s + Number(x.amount||0), 0);
     elTotal.textContent = fmtRM(total);
     elCount.textContent = `${tx.length} transaksi`;
 
-    // Table
-    elTx.innerHTML = tx.map(x => `
-      <tr>
-        <td>${x.date || ""}</td>
-        <td>${x.category || ""}</td>
-        <td>${x.mode || ""}</td>
-        <td class="right">${fmtRM(x.amount)}</td>
-        <td>${x.notes || ""}</td>
-        <td class="right"><button class="secondary" data-del="${x.id}">Padam</button></td>
-      </tr>
-    `).join("");
+    // Payment mode summary
+    const byMode = {};
+    tx.forEach(x => byMode[x.mode] = (byMode[x.mode]||0) + Number(x.amount||0));
+    elModeSummary.innerHTML = `
+      <table>
+        <thead><tr><th>Mode</th><th class="right">Spent</th></tr></thead>
+        <tbody>
+          ${MODES.map(m=>`
+            <tr><td>${m}</td><td class="right">${fmtRM(byMode[m]||0)}</td></tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
 
     // Category summary with budget
     const byCat = {};
     tx.forEach(x => byCat[x.category] = (byCat[x.category]||0) + Number(x.amount||0));
-
     elCategorySummary.innerHTML = `
       <table>
         <thead><tr><th>Kategori</th><th class="right">Spent</th><th class="right">Budget</th><th class="right">Baki</th></tr></thead>
@@ -385,38 +621,76 @@
       </table>
     `;
 
-    // Mode summary
-    const byMode = {};
-    tx.forEach(x => byMode[x.mode] = (byMode[x.mode]||0) + Number(x.amount||0));
+    // Transactions list with reveal delete
+    elTxList.innerHTML = tx.map(x => `
+      <div class="tx-item" data-id="${x.id}">
+        <div class="tx-actions">
+          <button class="danger" data-del="${x.id}">Delete</button>
+        </div>
+        <div class="tx-content">
+          <div class="tx-left">
+            <div class="tx-title">${x.category || ""}</div>
+            <div class="tx-sub">${x.date || ""} • ${x.mode || ""}</div>
+            ${x.notes ? `<div class="tx-note">${x.notes}</div>` : ""}
+          </div>
+          <div class="tx-amt">${fmtRM(x.amount)}</div>
+        </div>
+      </div>
+    `).join("");
 
-    elModeSummary.innerHTML = `
-      <table>
-        <thead><tr><th>Mode</th><th class="right">Spent</th></tr></thead>
-        <tbody>
-          ${MODES.map(m=>`
-            <tr><td>${m}</td><td class="right">${fmtRM(byMode[m]||0)}</td></tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
+    enableSwipeReveal();
+  }
+
+  function enableSwipeReveal(){
+    // Simple swipe left/right to reveal delete
+    const items = document.querySelectorAll(".tx-item");
+    items.forEach(item=>{
+      let startX = 0;
+      let moved = false;
+
+      const content = item.querySelector(".tx-content");
+
+      function onStart(e){
+        moved = false;
+        startX = (e.touches ? e.touches[0].clientX : e.clientX);
+      }
+      function onMove(e){
+        const x = (e.touches ? e.touches[0].clientX : e.clientX);
+        const dx = x - startX;
+        if (Math.abs(dx) > 12) moved = true;
+        if (!moved) return;
+        // swipe left reveal, swipe right hide
+        if (dx < -30) item.classList.add("reveal");
+        if (dx > 30) item.classList.remove("reveal");
+      }
+      function onClick(){
+        // tap toggles reveal (nice for desktop)
+        item.classList.toggle("reveal");
+      }
+
+      content.addEventListener("touchstart", onStart, {passive:true});
+      content.addEventListener("touchmove", onMove, {passive:true});
+      content.addEventListener("mousedown", onStart);
+      content.addEventListener("mousemove", onMove);
+      content.addEventListener("click", onClick);
+    });
   }
 
   async function refreshAll(){
     try{
-      setSync(true, "Syncing...");
+      setSyncState("", "Syncing...");
       const [ex, bd] = await Promise.all([apiGet("listExpenses"), apiGet("listBudgets")]);
-
       if (!ex.ok) throw new Error(ex.error || "listExpenses failed");
       if (!bd.ok) throw new Error(bd.error || "listBudgets failed");
 
       expenses = (ex.items || []).map(x => ({
         id: x.id,
-        date: normalizeDateISO(x.date),
+        date: String(x.date || ""),
         category: String(x.category || ""),
         amount: Number(x.amount || 0),
         mode: String(x.mode || ""),
         notes: String(x.notes || "")
-      })).filter(x => x.date); // drop rows with invalid date
+      }));
 
       budgets = {};
       (bd.items || []).forEach(x => {
@@ -426,15 +700,16 @@
 
       currentPeriod = getPeriodForDate(todayISO());
       renderPeriodPicker();
-
       summarize();
-      setSync(true, "Synced ✓");
+
+      setSyncState("ok", "Synced ✓");
     }catch(err){
-      setSync(false, "Sync error: " + String(err.message || err));
+      setSyncState("danger", "Sync error");
+      console.error(err);
     }
   }
 
-  // Add expense (sync) — send YYYY-MM-DD
+  // Add expense (sync)
   document.getElementById("expenseForm").addEventListener("submit", async (e)=>{
     e.preventDefault();
     const payload = {
@@ -445,14 +720,16 @@
       notes: elNotes.value.trim()
     };
     try{
-      setSync(true, "Saving...");
+      setSyncState("", "Saving...");
       const res = await apiPost("addExpense", payload);
       if (!res.ok) throw new Error(res.error || "addExpense failed");
       elAmount.value = "";
       elNotes.value = "";
       await refreshAll();
+      showScreen("dashboard");
     }catch(err){
-      setSync(false, "Save error: " + String(err.message || err));
+      setSyncState("danger", "Save error");
+      console.error(err);
     }
   });
 
@@ -464,12 +741,13 @@
     if (!confirm("Padam rekod ini?")) return;
 
     try{
-      setSync(true, "Deleting...");
+      setSyncState("", "Deleting...");
       const res = await apiPost("deleteExpense", { id });
       if (!res.ok) throw new Error(res.error || "deleteExpense failed");
       await refreshAll();
     }catch(err){
-      setSync(false, "Delete error: " + String(err.message || err));
+      setSyncState("danger", "Delete error");
+      console.error(err);
     }
   });
 
@@ -489,7 +767,7 @@
 
   document.getElementById("btnRefresh").addEventListener("click", refreshAll);
 
-  // start
+  // Start
   refreshAll();
 </script>
 </body>
