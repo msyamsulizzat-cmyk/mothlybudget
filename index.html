@@ -387,19 +387,15 @@
   const fmtRM = (n) => "RM " + (Number(n||0)).toFixed(2);
   const todayISO = () => new Date().toISOString().slice(0,10);
 
-  // --- DATE NORMALIZER (fix "Invalid time value") ---
+  // --- DATE NORMALIZER (fix Invalid time value / Invalid Date) ---
   function normalizeDateISO(v){
     if (v == null) return null;
     let s = String(v).trim();
     if (!s) return null;
 
-    // ISO datetime -> YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0,10);
-
-    // already YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
 
-    // dd/mm/yyyy (Malaysia) -> YYYY-MM-DD
     const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (m){
       const dd = Number(m[1]);
@@ -410,7 +406,6 @@
       }
     }
 
-    // last resort parse
     const dt = new Date(s);
     if (isNaN(dt.getTime())) return null;
     return dt.toISOString().slice(0,10);
@@ -422,6 +417,10 @@
     const dt = new Date(iso + "T00:00:00");
     if (isNaN(dt.getTime())) return null;
     return { iso, dt };
+  }
+
+  function isValidDateObj(d){
+    return d instanceof Date && !isNaN(d.getTime());
   }
   // --------------------------------------------------
 
@@ -460,13 +459,22 @@
 
   function inPeriod(dateISO, period) {
     if (!dateISO || !period) return false;
-    const d = new Date(dateISO + "T00:00:00").getTime();
+    const iso = normalizeDateISO(dateISO);
+    if (!iso) return false;
+
+    const d = new Date(iso + "T00:00:00").getTime();
     const s = new Date(period.startISO + "T00:00:00").getTime();
     const e = new Date(period.endISO + "T23:59:59").getTime();
+
+    if ([d,s,e].some(x => isNaN(x))) return false;
     return d >= s && d <= e;
   }
 
+  // REPAIRED: safe label (tak crash kalau invalid)
   function formatPeriodLabel(period) {
+    if (!period || !isValidDateObj(period.start) || !isValidDateObj(period.end)) {
+      return `${period?.startISO || "—"} – ${period?.endISO || "—"}`;
+    }
     const opts = { day:"2-digit", month:"short", year:"numeric" };
     const s = period.start.toLocaleDateString("ms-MY", opts);
     const e = period.end.toLocaleDateString("ms-MY", opts);
@@ -593,26 +601,47 @@
       if (p) periods.push(p);
     }
 
-    if (!periods.find(p => periodKey(p) === periodKey(currentPeriod))) currentPeriod = periods[0];
+    // ensure currentPeriod valid
+    if (!currentPeriod || !isValidDateObj(currentPeriod.start) || !isValidDateObj(currentPeriod.end)) {
+      currentPeriod = periods[0] || getPeriodForDate(todayISO());
+    }
+
+    if (periods.length && !periods.find(p => periodKey(p) === periodKey(currentPeriod))) {
+      currentPeriod = periods[0];
+    }
 
     elPicker.innerHTML = periods.map(p=>{
       const key = periodKey(p);
       const label = formatPeriodLabel(p);
-      const selected = key === periodKey(currentPeriod) ? "selected" : "";
+      const selected = currentPeriod && key === periodKey(currentPeriod) ? "selected" : "";
       return `<option value="${key}" ${selected}>${label}</option>`;
     }).join("");
 
     elPeriodLabel.textContent = currentPeriod ? ("Cycle: " + formatPeriodLabel(currentPeriod)) : "Cycle: —";
 
+    // REPAIRED: onchange validate (tak create Invalid Date)
     elPicker.onchange = () => {
-      const [s,e] = elPicker.value.split("_");
-      currentPeriod = { startISO: s, endISO: e, start: new Date(s + "T00:00:00"), end: new Date(e + "T00:00:00") };
+      const val = String(elPicker.value || "");
+      const parts = val.split("_");
+      if (parts.length !== 2) return;
+
+      const s = normalizeDateISO(parts[0]);
+      const e = normalizeDateISO(parts[1]);
+      if (!s || !e) return;
+
+      const ds = safeDate(s);
+      const de = safeDate(e);
+      if (!ds || !de) return;
+
+      currentPeriod = { startISO: ds.iso, endISO: de.iso, start: ds.dt, end: de.dt };
       elPeriodLabel.textContent = "Cycle: " + formatPeriodLabel(currentPeriod);
       summarize();
     };
   }
 
   function summarize(){
+    if (!currentPeriod) return;
+
     const tx = expensesThisPeriod();
 
     const total = tx.reduce((s,x)=> s + Number(x.amount||0), 0);
@@ -713,6 +742,7 @@
       if (!ex.ok) throw new Error(ex.error || "listExpenses failed");
       if (!bd.ok) throw new Error(bd.error || "listBudgets failed");
 
+      // REPAIRED: normalize date on load + drop rows that can't be normalized
       expenses = (ex.items || []).map(x => ({
         id: x.id,
         date: normalizeDateISO(x.date || ""),
@@ -720,7 +750,7 @@
         amount: Number(x.amount || 0),
         mode: String(x.mode || ""),
         notes: String(x.notes || "")
-      }));
+      })).filter(x => x.date); // important: no invalid date row
 
       budgets = {};
       (bd.items || []).forEach(x => {
@@ -728,7 +758,8 @@
         if (cat) budgets[cat] = Number(x.monthly_budget || 0);
       });
 
-      currentPeriod = getPeriodForDate(todayISO());
+      // keep currentPeriod, but ensure valid
+      currentPeriod = getPeriodForDate(todayISO()) || currentPeriod;
       renderPeriodPicker();
       summarize();
 
@@ -743,7 +774,7 @@
   document.getElementById("expenseForm").addEventListener("submit", async (e)=>{
     e.preventDefault();
     const payload = {
-      date: elDate.value,
+      date: elDate.value, // already YYYY-MM-DD from input[type=date]
       category: elCat.value,
       amount: String(Number(elAmount.value||0)),
       mode: elMode.value,
