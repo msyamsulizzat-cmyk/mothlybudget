@@ -159,6 +159,33 @@
   const fmtRM = (n) => "RM " + (Number(n||0)).toFixed(2);
   const todayISO = () => new Date().toISOString().slice(0,10);
 
+  // Normalize any date coming from Google Sheet into YYYY-MM-DD
+  function normalizeDateISO(value) {
+    const s = String(value || "").trim();
+    if (!s) return "";
+
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+    // ISO datetime (YYYY-MM-DDTHH:mm:ss...)
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
+
+    // DD/MM/YYYY or D/M/YYYY
+    const dmY = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (dmY) {
+      const dd = dmY[1].padStart(2, "0");
+      const mm = dmY[2].padStart(2, "0");
+      const yy = dmY[3];
+      return `${yy}-${mm}-${dd}`;
+    }
+
+    // Let JS parse other formats
+    const dt = new Date(s);
+    if (!isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
+
+    return "";
+  }
+
   const FIXED_CATEGORIES = [
     "Nafkah","TNB","PAIP","Makan","Zakat","Petrol","Saving","Digi","Rumah","Taska",
     "Medical card","Iphone","Prime","Maxis","Hibah","Sofa","Others"
@@ -171,12 +198,12 @@
   // ====== PERIOD (25 → 24) + max 12 cycles ======
   function getPeriodForDate(dateISO) {
     const dt = new Date(dateISO + "T00:00:00");
+    if (isNaN(dt.getTime())) throw new Error("Invalid Date: " + dateISO);
+
     const y = dt.getFullYear();
     const m = dt.getMonth(); // 0-11
     const d = dt.getDate();
 
-    // d >= 25 => start bulan ini 25
-    // d <= 24 => start bulan lepas 25
     let startY = y, startM = m;
     if (d <= 24) {
       const prev = new Date(y, m - 1, 1);
@@ -194,6 +221,8 @@
   function inPeriod(dateISO, period) {
     if (!dateISO) return false;
     const d = new Date(dateISO + "T00:00:00").getTime();
+    if (isNaN(d)) return false;
+
     const s = new Date(period.startISO + "T00:00:00").getTime();
     const e = new Date(period.endISO + "T23:59:59").getTime();
     return d >= s && d <= e;
@@ -278,7 +307,6 @@
       const p = getPeriodForDate(dateISO);
       map.set(periodKey(p), p);
     }
-    // ensure current period included
     const pNow = getPeriodForDate(todayISO());
     map.set(periodKey(pNow), pNow);
 
@@ -291,7 +319,6 @@
     const periods = buildPeriodsFromExpensesMax12();
     if (!periods.length) periods.push(getPeriodForDate(todayISO()));
 
-    // Ensure currentPeriod exists in list; else fallback
     const curKey = periodKey(currentPeriod);
     if (!periods.find(p => periodKey(p) === curKey)) currentPeriod = periods[0];
 
@@ -384,12 +411,12 @@
 
       expenses = (ex.items || []).map(x => ({
         id: x.id,
-        date: String(x.date || ""),
+        date: normalizeDateISO(x.date),
         category: String(x.category || ""),
         amount: Number(x.amount || 0),
         mode: String(x.mode || ""),
         notes: String(x.notes || "")
-      }));
+      })).filter(x => x.date); // drop rows with invalid date
 
       budgets = {};
       (bd.items || []).forEach(x => {
@@ -397,7 +424,6 @@
         if (cat) budgets[cat] = Number(x.monthly_budget || 0);
       });
 
-      // Reset to cycle semasa, kemudian allow picker override
       currentPeriod = getPeriodForDate(todayISO());
       renderPeriodPicker();
 
@@ -408,7 +434,7 @@
     }
   }
 
-  // Add expense (sync)
+  // Add expense (sync) — send YYYY-MM-DD
   document.getElementById("expenseForm").addEventListener("submit", async (e)=>{
     e.preventDefault();
     const payload = {
