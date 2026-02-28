@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Personal Expenses (Sync)</title>
+  <title>Personal Expenses (25→24, Sync)</title>
   <style>
     :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
     body { margin: 0; background:#f6f7fb; color:#111; }
-    header { padding: 16px; background:#fff; position: sticky; top: 0; border-bottom: 1px solid #e7e7ee; }
+    header { padding: 16px; background:#fff; position: sticky; top: 0; border-bottom: 1px solid #e7e7ee; z-index: 10; }
     h1 { margin: 0; font-size: 18px; }
     main { padding: 16px; max-width: 980px; margin: 0 auto; }
     .grid { display: grid; gap: 12px; }
@@ -20,7 +20,7 @@
     textarea { resize: vertical; min-height: 70px; }
     button { cursor: pointer; border: 0; background:#111; color:#fff; font-weight: 600; }
     button.secondary { background:#eef0f6; color:#111; border:1px solid #d8d8e3; }
-    .row { display:flex; gap:8px; }
+    .row { display:flex; gap:8px; align-items: stretch; }
     .row > * { flex:1; }
     .muted { color:#666; font-size: 12px; }
     .kpi { font-size: 22px; font-weight: 800; }
@@ -31,38 +31,53 @@
     .pill { display:inline-block; padding:4px 8px; border-radius: 999px; font-size: 12px; background:#eef0f6; }
     .danger { background:#ffe7ea; color:#b00020; }
     .ok { background:#e9fff0; color:#0b6b2b; }
+    .small { font-size: 12px; }
   </style>
 </head>
 <body>
 <header>
   <h1>Personal Expenses</h1>
-  <div class="muted" id="monthLabel"></div>
+  <div class="muted" id="periodLabel"></div>
   <div class="muted" id="syncStatus"></div>
 </header>
 
 <main class="grid" style="gap:16px;">
   <section class="grid grid-2">
     <div class="card">
-      <div class="muted">Total bulan ini</div>
-      <div class="kpi" id="totalThisMonth">RM 0.00</div>
-      <div class="muted" id="countThisMonth">0 transaksi</div>
+      <div class="muted">Total untuk cycle dipilih (25hb → 24hb)</div>
+      <div class="kpi" id="totalThisPeriod">RM 0.00</div>
+      <div class="muted" id="countThisPeriod">0 transaksi</div>
+      <div class="muted small" style="margin-top:6px;">
+        Dashboard ikut billing cycle: 25hb bulan ini hingga 24hb bulan hadapan.
+      </div>
     </div>
 
     <div class="card">
-      <div class="muted">Sync</div>
+      <div class="muted">Pilih cycle (max 12)</div>
+      <select id="periodPicker"></select>
+
+      <div style="margin-top:10px;">
+        <label style="display:flex; gap:10px; align-items:center; font-size:13px; color:#111; margin:0;">
+          <input type="checkbox" id="toggleExcludeSaving" style="width:auto; transform: scale(1.2);" />
+          Exclude “Saving” dari kiraan (total & summary)
+        </label>
+        <div class="muted">Jika ON: kategori Saving tidak dikira sebagai belanja.</div>
+      </div>
+
       <div class="row" style="margin-top:10px;">
         <button class="secondary" id="btnRefresh">Refresh</button>
         <button class="secondary" id="btnExport">Export CSV</button>
       </div>
+
       <div class="muted" style="margin-top:10px;">
-        Data disimpan dalam Google Sheet (sync antara iPhone & laptop).
+        Data sync ke Google Sheet (boleh guna iPhone + laptop).
       </div>
     </div>
   </section>
 
   <section class="grid grid-2">
     <div class="card">
-      <h3 style="margin:0 0 10px 0;">Tambah Perbelanjaan</h3>
+      <h3 style="margin:0 0 10px 0;">Key In Perbelanjaan</h3>
       <form id="expenseForm" class="grid" style="gap:10px;">
         <div class="row">
           <div>
@@ -94,7 +109,7 @@
         </div>
 
         <div>
-          <label>Nota (optional)</label>
+          <label>Notes (optional)</label>
           <textarea id="notes" placeholder="Contoh: makan tengahari, parking, dll"></textarea>
         </div>
 
@@ -103,20 +118,20 @@
     </div>
 
     <div class="card">
-      <h3 style="margin:0 0 10px 0;">Ringkasan Payment Mode (Bulan Ini)</h3>
+      <h3 style="margin:0 0 10px 0;">Ringkasan Payment Mode (Cycle Dipilih)</h3>
       <div id="modeSummary"></div>
     </div>
   </section>
 
   <section class="card">
-    <h3 style="margin:0 0 10px 0;">Budget Kategori (Bulan Ini)</h3>
+    <h3 style="margin:0 0 10px 0;">Budget Kategori (Cycle Dipilih)</h3>
     <div class="muted" style="margin-bottom:8px;">Budget diambil dari tab <b>Budgets</b> dalam Google Sheet.</div>
     <div id="categorySummary"></div>
   </section>
 
   <section class="card">
-    <h3 style="margin:0 0 10px 0;">Transaksi (Bulan Ini)</h3>
-    <div class="muted" style="margin-bottom:8px;">Klik “Padam” untuk buang rekod (terus delete dari Google Sheet).</div>
+    <h3 style="margin:0 0 10px 0;">Transaksi (Cycle Dipilih)</h3>
+    <div class="muted" style="margin-bottom:8px;">Klik “Padam” untuk delete rekod dari Google Sheet.</div>
     <div style="overflow:auto;">
       <table>
         <thead>
@@ -125,7 +140,7 @@
             <th>Kategori</th>
             <th>Mode</th>
             <th class="right">Amaun</th>
-            <th>Nota</th>
+            <th>Notes</th>
             <th></th>
           </tr>
         </thead>
@@ -136,24 +151,13 @@
 </main>
 
 <script>
-  // === EDIT 2 VALUE INI ===
+  // === EDIT 2 VALUE INI SAHAJA ===
   const GAS_URL = "https://script.google.com/macros/s/AKfycby0Y_9LgGZOLciEV9s_7F27JyUA75RFEFsG899sgrH050H3EbldlE1q8oopZz2hpNA/exec";
   const TOKEN   = "IsymatPotpot2302";
-  // =========================
+  // ===============================
 
   const fmtRM = (n) => "RM " + (Number(n||0)).toFixed(2);
   const todayISO = () => new Date().toISOString().slice(0,10);
-
-  const getMonthKey = (d) => {
-    const dt = new Date(d + "T00:00:00");
-    return dt.getFullYear() + "-" + String(dt.getMonth()+1).padStart(2,"0");
-  };
-
-  const monthLabel = (monthKey) => {
-    const [y,m] = monthKey.split("-").map(Number);
-    const dt = new Date(y, m-1, 1);
-    return dt.toLocaleDateString("ms-MY", { month:"long", year:"numeric" });
-  };
 
   const FIXED_CATEGORIES = [
     "Nafkah","TNB","PAIP","Makan","Zakat","Petrol","Saving","Digi","Rumah","Taska",
@@ -164,10 +168,56 @@
     "Cash","QR Pay","Credit Card Maybank","Credit Card RHB","Credit Card BSN","SPayLater"
   ];
 
-  const elMonthLabel = document.getElementById("monthLabel");
+  // ====== PERIOD (25 → 24) + max 12 cycles ======
+  function getPeriodForDate(dateISO) {
+    const dt = new Date(dateISO + "T00:00:00");
+    const y = dt.getFullYear();
+    const m = dt.getMonth(); // 0-11
+    const d = dt.getDate();
+
+    // d >= 25 => start bulan ini 25
+    // d <= 24 => start bulan lepas 25
+    let startY = y, startM = m;
+    if (d <= 24) {
+      const prev = new Date(y, m - 1, 1);
+      startY = prev.getFullYear();
+      startM = prev.getMonth();
+    }
+
+    const start = new Date(startY, startM, 25);
+    const end = new Date(startY, startM + 1, 24);
+
+    const toISO = (x) => x.toISOString().slice(0,10);
+    return { startISO: toISO(start), endISO: toISO(end), start, end };
+  }
+
+  function inPeriod(dateISO, period) {
+    if (!dateISO) return false;
+    const d = new Date(dateISO + "T00:00:00").getTime();
+    const s = new Date(period.startISO + "T00:00:00").getTime();
+    const e = new Date(period.endISO + "T23:59:59").getTime();
+    return d >= s && d <= e;
+  }
+
+  function formatPeriodLabel(period) {
+    const opts = { day:"2-digit", month:"short", year:"numeric" };
+    const s = period.start.toLocaleDateString("ms-MY", opts);
+    const e = period.end.toLocaleDateString("ms-MY", opts);
+    return `${s} – ${e}`;
+  }
+
+  function periodKey(p){ return `${p.startISO}_${p.endISO}`; }
+  // =============================================
+
+  // Elements
+  const elPeriodLabel = document.getElementById("periodLabel");
   const elSync = document.getElementById("syncStatus");
-  const elTotal = document.getElementById("totalThisMonth");
-  const elCount = document.getElementById("countThisMonth");
+  const elTotal = document.getElementById("totalThisPeriod");
+  const elCount = document.getElementById("countThisPeriod");
+  const elPicker = document.getElementById("periodPicker");
+
+  const elToggleExcludeSaving = document.getElementById("toggleExcludeSaving");
+
   const elCat = document.getElementById("category");
   const elMode = document.getElementById("mode");
   const elNotes = document.getElementById("notes");
@@ -177,13 +227,21 @@
   const elCategorySummary = document.getElementById("categorySummary");
   const elModeSummary = document.getElementById("modeSummary");
 
-  const currentMonth = getMonthKey(todayISO());
-  elMonthLabel.textContent = "Bulan semasa: " + monthLabel(currentMonth);
+  // UI defaults
   elDate.value = todayISO();
-
-  // dropdown kategori fixed
   elCat.innerHTML = FIXED_CATEGORIES.map(c=>`<option>${c}</option>`).join("");
 
+  // Toggle Saving persistence
+  const SETTING_KEY = "exclude_saving_v1";
+  let excludeSaving = (localStorage.getItem(SETTING_KEY) ?? "true") === "true";
+  elToggleExcludeSaving.checked = excludeSaving;
+  elToggleExcludeSaving.addEventListener("change", ()=>{
+    excludeSaving = elToggleExcludeSaving.checked;
+    localStorage.setItem(SETTING_KEY, String(excludeSaving));
+    summarize();
+  });
+
+  // API (avoid CORS preflight with URLSearchParams)
   async function apiGet(action) {
     const url = `${GAS_URL}?action=${encodeURIComponent(action)}&token=${encodeURIComponent(TOKEN)}`;
     const res = await fetch(url);
@@ -198,20 +256,66 @@
 
   let expenses = [];
   let budgets = {}; // {category: monthly_budget}
+  let currentPeriod = getPeriodForDate(todayISO());
 
   function setSync(ok, msg){
     const pill = ok ? "pill ok" : "pill danger";
     elSync.innerHTML = `<span class="${pill}">${msg}</span>`;
   }
 
-  function expensesThisMonth(){
+  function expensesThisPeriod(){
     return expenses
-      .filter(x => getMonthKey(String(x.date||"")) === currentMonth)
+      .filter(x => inPeriod(String(x.date||""), currentPeriod))
+      .filter(x => !excludeSaving || String(x.category||"").trim().toLowerCase() !== "saving")
       .sort((a,b)=> (String(a.date) < String(b.date) ? 1 : -1));
   }
 
+  function buildPeriodsFromExpensesMax12() {
+    const map = new Map();
+    for (const x of expenses) {
+      const dateISO = String(x.date||"").trim();
+      if (!dateISO) continue;
+      const p = getPeriodForDate(dateISO);
+      map.set(periodKey(p), p);
+    }
+    // ensure current period included
+    const pNow = getPeriodForDate(todayISO());
+    map.set(periodKey(pNow), pNow);
+
+    return Array.from(map.values())
+      .sort((a,b)=> b.start - a.start)
+      .slice(0, 12);
+  }
+
+  function renderPeriodPicker() {
+    const periods = buildPeriodsFromExpensesMax12();
+    if (!periods.length) periods.push(getPeriodForDate(todayISO()));
+
+    // Ensure currentPeriod exists in list; else fallback
+    const curKey = periodKey(currentPeriod);
+    if (!periods.find(p => periodKey(p) === curKey)) currentPeriod = periods[0];
+
+    elPicker.innerHTML = periods.map(p=>{
+      const key = periodKey(p);
+      const label = formatPeriodLabel(p);
+      const selected = key === periodKey(currentPeriod) ? "selected" : "";
+      return `<option value="${key}" ${selected}>${label}</option>`;
+    }).join("");
+
+    elPeriodLabel.textContent = "Cycle: " + formatPeriodLabel(currentPeriod);
+
+    elPicker.onchange = () => {
+      const [s,e] = elPicker.value.split("_");
+      const start = new Date(s + "T00:00:00");
+      const end = new Date(e + "T00:00:00");
+      currentPeriod = { startISO: s, endISO: e, start, end };
+      elPeriodLabel.textContent = "Cycle: " + formatPeriodLabel(currentPeriod);
+      summarize();
+    };
+  }
+
   function summarize(){
-    const tx = expensesThisMonth();
+    const tx = expensesThisPeriod();
     const total = tx.reduce((s,x)=> s + Number(x.amount||0), 0);
     elTotal.textContent = fmtRM(total);
     elCount.textContent = `${tx.length} transaksi`;
@@ -293,8 +397,12 @@
         if (cat) budgets[cat] = Number(x.monthly_budget || 0);
       });
 
-      setSync(true, "Synced ✓");
+      // Reset to cycle semasa, kemudian allow picker override
+      currentPeriod = getPeriodForDate(todayISO());
+      renderPeriodPicker();
+
       summarize();
+      setSync(true, "Synced ✓");
     }catch(err){
       setSync(false, "Sync error: " + String(err.message || err));
     }
@@ -339,16 +447,16 @@
     }
   });
 
-  // Export CSV
+  // Export CSV for selected cycle
   document.getElementById("btnExport").addEventListener("click", ()=>{
-    const tx = expensesThisMonth();
+    const tx = expensesThisPeriod();
     const rows = [["Date","Category","Amount","Payment Mode","Notes"]]
       .concat(tx.map(x=>[x.date,x.category,x.amount,x.mode,x.notes||""]));
     const csv = rows.map(r => r.map(v => `"${String(v).replaceAll('"','""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "expenses-this-month.csv";
+    a.download = `expenses_${currentPeriod.startISO}_to_${currentPeriod.endISO}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   });
