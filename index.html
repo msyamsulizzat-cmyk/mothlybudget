@@ -2,13 +2,11 @@
 <html lang="ms">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport"
-    <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#ffffff">
-        content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+
+  <!-- PWA / iPhone Home Screen -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="theme-color" content="#ffffff">
@@ -48,7 +46,6 @@
         --ok-bg:#072615;
         --ok:#46e08f;
       }
-      meta[name="theme-color"]{ content: #0b0c10; }
     }
 
     body{
@@ -647,12 +644,10 @@
   }
 
   function enableSwipeReveal(){
-    // Simple swipe left/right to reveal delete
     const items = document.querySelectorAll(".tx-item");
     items.forEach(item=>{
       let startX = 0;
       let moved = false;
-
       const content = item.querySelector(".tx-content");
 
       function onStart(e){
@@ -664,12 +659,10 @@
         const dx = x - startX;
         if (Math.abs(dx) > 12) moved = true;
         if (!moved) return;
-        // swipe left reveal, swipe right hide
         if (dx < -30) item.classList.add("reveal");
         if (dx > 30) item.classList.remove("reveal");
       }
       function onClick(){
-        // tap toggles reveal (nice for desktop)
         item.classList.toggle("reveal");
       }
 
@@ -770,6 +763,7 @@
     URL.revokeObjectURL(a.href);
   });
 
+  // Refresh button
   document.getElementById("btnRefresh").addEventListener("click", refreshAll);
 
   // Start
