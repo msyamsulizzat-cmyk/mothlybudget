@@ -701,10 +701,11 @@
       summarize();
 
       setSyncState("ok", "Synced ✓");
-    }catch(err){
-      setSyncState("danger", "Sync error");
-      console.error(err);
-    }
+   }catch(err){
+  const msg = String(err && (err.message || err) || "Unknown error");
+  setSyncState("danger", "Sync error: " + msg);
+  console.error(err);
+}
   }
 
   // Add expense (sync)
